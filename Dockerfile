@@ -1,54 +1,47 @@
-FROM serversideup/php:8.4-fpm-nginx
+# === Étape 1 : Base PHP officielle avec extensions nécessaires ===
+FROM php:8.3-fpm
 
-# Set working directory
-WORKDIR /var/www/html
+# Variables d'environnement pour éviter les prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Switch to root to install packages
-USER root
-
-# Install system dependencies and PHP extensions
+# Mise à jour et installation des paquets système
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    unzip \
-    zip \
-    jpegoptim \
-    optipng \
-    pngquant \
-    gifsicle \
-    libvips42 \
     git \
+    unzip \
     curl \
+    libicu-dev \
+    libzip-dev \
+    libonig-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libvips-dev \
+    pkg-config \
+    libffi-dev \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions using the built-in helper
-RUN install-php-extensions \
-    bcmath \
-    curl \
-    gd \
-    imagick \
-    intl \
-    mbstring \
-    xml \
-    zip \
-    pdo_mysql \
-    redis \
-    vips \
-    ffi
+# Extensions PHP requises
+RUN docker-php-ext-install bcmath intl pcntl ffi opcache zip gd
 
-# Copy application files
-COPY --chown=www-data:www-data . /var/www/html
+# === Étape 2 : Composer ===
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && find /var/www/html -type f -exec chmod 644 {} \; \
-    && find /var/www/html -type d -exec chmod 755 {} \; \
-    && chmod -R ug+rwx /var/www/html/storage /var/www/html/bootstrap/cache
+# === Étape 3 : Copier le projet ===
+WORKDIR /var/www/html
+COPY . .
 
-# Install composer dependencies
-RUN composer install --no-ansi --no-interaction --optimize-autoloader
+# Installer les dépendances PHP
+RUN composer install --no-dev --optimize-autoloader
 
-# Switch back to www-data user
-USER www-data
+# Générer la clé de l'application si elle n’existe pas
+RUN php artisan key:generate --ansi
 
-# Expose port 8080 (default for serversideup/php)
-EXPOSE 8080
+# Permissions (optionnel mais conseillé)
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Exposer le port pour le serveur PHP-FPM
+EXPOSE 9000
+
+# Commande par défaut
+CMD ["php-fpm"]
